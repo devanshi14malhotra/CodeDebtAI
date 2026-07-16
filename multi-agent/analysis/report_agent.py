@@ -2,15 +2,7 @@ from shared.shared_models import FileContext, ReportItem, ReportOutput
 
 def _build_reason(file_ctx: FileContext) -> str:
     """Human-readable explanation for why this file was flagged."""
-    reasons = []
-
-    if file_ctx.churn_score >= 10:
-        reasons.append(f"changed {file_ctx.churn_score} times recently")
-    if file_ctx.last_touched_days >= 180:
-        reasons.append(f"untouched for {file_ctx.last_touched_days} days")
-
-    reason_detail = " and ".join(reasons) if reasons else "flagged by priority rule"
-    return f"High complexity ({file_ctx.complexity_grade}) — {reason_detail}"
+    return f"High complexity ({file_ctx.complexity_grade}) — priority score {file_ctx.priority_score:.1f}"
 
 def _build_summary(flagged_files: list[FileContext]) -> str:
     """Short overview line for the top of the dashboard report."""

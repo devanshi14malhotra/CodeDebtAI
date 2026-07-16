@@ -8,10 +8,8 @@ class FileAnalysis(BaseModel):
     maintainability_index: float
 
 class FileContext(FileAnalysis):
-    churn_score: int               # number of commits in last N months
-    last_touched_days: int         # days since last commit
     priority_flag: bool
-    priority_score: float          # complexity_score * churn_score, 0-100 normalized
+    priority_score: float          # complexity_score, capped at 100
 
 class ReportItem(BaseModel):
     file_path: str
