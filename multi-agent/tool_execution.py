@@ -1,9 +1,9 @@
 import subprocess
 import json
+import os
+import sys
 from shared_models import FileAnalysis
 from config import HIGH_COMPLEXITY_THRESHOLD
-
-import sys
 
 def run_radon_cc(file_paths: list[str]) -> dict:
     result = subprocess.run(
@@ -36,22 +36,34 @@ def _average_complexity(cc_blocks: list[dict]) -> tuple[float, str]:
     return avg_score, worst_grade
 
 def run_static_analysis(file_paths: list[str]) -> list[FileAnalysis]:
-    """Tool Execution Agent entry point - called by orchestrator."""
     cc_data = run_radon_cc(file_paths)
     mi_data = run_radon_mi(file_paths)
-
-    analyzed = []
+    results = []
+    
+    # Normalize keys to handle Windows drive letter case differences
+    normalized_cc_data = {os.path.normcase(os.path.abspath(k)): v for k, v in cc_data.items()}
+    normalized_mi_data = {os.path.normcase(os.path.abspath(k)): v for k, v in mi_data.items()}
+    
     for file_path in file_paths:
-        cc_blocks = cc_data.get(file_path, [])
+        normalized_path = os.path.normcase(os.path.abspath(file_path))
+        cc_blocks = normalized_cc_data.get(normalized_path, [])
+        
+        # Radon returns a dict (not a list) if a file has a syntax error
+        if isinstance(cc_blocks, dict) and "error" in cc_blocks:
+            continue
+            
         avg_complexity, worst_grade = _average_complexity(cc_blocks)
-        mi_entry = mi_data.get(file_path, {})
+        
+        mi_entry = normalized_mi_data.get(normalized_path, {})
         mi_score = mi_entry.get("mi", 100.0) if isinstance(mi_entry, dict) else 100.0
-
-        analyzed.append(FileAnalysis(
-            file_path=file_path,
-            complexity_score=avg_complexity,
-            complexity_grade=worst_grade,
-            maintainability_index=mi_score
-        ))
-
-    return analyzed
+        
+        # Only include if we found valid data
+        if cc_blocks:
+            results.append(FileAnalysis(
+                file_path=file_path,
+                complexity_score=avg_complexity,
+                complexity_grade=worst_grade,
+                maintainability_index=mi_score
+            ))
+            
+    return results
