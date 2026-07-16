@@ -20,7 +20,11 @@ def clone_repo(repo_url: str) -> str:
     local_path = os.path.join(TEMP_CLONE_DIR, repo_name)
 
     if os.path.exists(local_path):
-        shutil.rmtree(local_path, onexc=_remove_readonly)
+        import sys
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(local_path, onexc=_remove_readonly)
+        else:
+            shutil.rmtree(local_path, onerror=_remove_readonly)
     os.makedirs(TEMP_CLONE_DIR, exist_ok=True)
 
     subprocess.run(
