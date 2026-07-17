@@ -75,10 +75,13 @@ export default function Home() {
       setLoading(false);
       setCurrentStepIndex(0);
       setTraceMessages(["Initializing LangGraph pipeline..."]);
-
-      // Connect to the Backend WebSocket
+      
+      // --- DYNAMIC WEBSOCKET CONFIGURATION FOR DEPLOYMENT ---
       const analysisId = crypto.randomUUID();
-      const wsUrl = `ws://localhost:8000/analysis/${analysisId}/events?repo_url=${encodeURIComponent(repoUrl)}`;
+      const httpUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const wsBaseUrl = httpUrl.replace(/^http/, "ws");
+      const wsUrl = `${wsBaseUrl}/analysis/${analysisId}/events?repo_url=${encodeURIComponent(repoUrl)}`;
+      
       const ws = new WebSocket(wsUrl);
 
       ws.onmessage = (event) => {
@@ -122,7 +125,7 @@ export default function Home() {
       };
 
       ws.onerror = () => {
-        alert("Failed to connect to the backend analysis engine.");
+        alert("Failed to connect to the backend analysis engine. Is the server waking up?");
         handleCancelScan();
       };
     }, 600);
@@ -171,7 +174,7 @@ export default function Home() {
       {/* Grid mask overlay */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#131625_1px,transparent_1px),linear-gradient(to_bottom,#131625_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-[0.06] pointer-events-none" />
 
-      {/* Screen 1 - Landing Header text (fades away when card is pinned) */}
+      {/* Screen 1 - Landing Header text */}
       {!isPinned && (
         <motion.div
           animate={isPinned ? { opacity: 0, y: -80, height: 0, marginBottom: 0 } : { opacity: 1, y: 0, marginBottom: 48 }}
@@ -301,14 +304,12 @@ export default function Home() {
           animate={{ opacity: 1 }}
           className="w-full max-w-[650px] z-10 flex flex-col items-center mt-12 space-y-8"
         >
-          {/* Header Caption */}
           <div className="text-center">
             <h2 className="text-sm font-bold text-slate-200 tracking-wider uppercase">
               {activeGroup === 6 ? 'Analysis Complete' : 'Analyzing your repository...'}
             </h2>
           </div>
 
-          {/* Progress Bar (Spring animated width based on current step index) */}
           <div className="w-full h-2 bg-slate-950 border border-slate-900 rounded-full overflow-hidden relative">
             <motion.div
               initial={{ width: 0 }}
@@ -318,7 +319,6 @@ export default function Home() {
             />
           </div>
 
-          {/* Subtitle Caption */}
           <div className="text-center text-xs text-slate-500 select-none">
             {activeGroup === 6 ? (
               <span className="text-emerald-400 font-semibold flex items-center gap-1.5 justify-center">
@@ -329,7 +329,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* Active scan message block (displays current running group step with crossfades) */}
           <div className="w-full min-h-[140px] flex items-center justify-center">
             <AnimatePresence mode="wait">
               <motion.div
@@ -363,7 +362,6 @@ export default function Home() {
                           : "text-slate-650 opacity-40 border-transparent"
                       )}
                     >
-                      {/* Left indicator state */}
                       <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
                         {isCompleted ? (
                           <div className="w-5 h-5 rounded-full bg-emerald-950/40 border border-emerald-900/30 flex items-center justify-center text-emerald-400">
@@ -379,7 +377,6 @@ export default function Home() {
                         )}
                       </div>
 
-                      {/* Step text */}
                       <span className={cn(
                         "font-medium tracking-wide",
                         isCurrent ? "font-bold text-white" : ""
@@ -409,7 +406,6 @@ export default function Home() {
              )}
           </div>
 
-          {/* Control Reset */}
           <div className="pt-6 border-t border-slate-900 w-full flex justify-center gap-4 select-none">
             <button
               type="button"
