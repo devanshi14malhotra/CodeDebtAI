@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CodeXml } from 'lucide-react';
+import { LayoutDashboard, CodeXml, PlusCircle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function Sidebar() {
@@ -11,8 +11,10 @@ export function Sidebar() {
 
   // Core navigation items only
   const navigation = [
+    { name: 'New Analysis', href: '/', icon: PlusCircle },
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Code Review', href: '/code-review', icon: CodeXml },
+    { name: 'About Metrics', href: '/about', icon: Info },
   ];
 
   return (

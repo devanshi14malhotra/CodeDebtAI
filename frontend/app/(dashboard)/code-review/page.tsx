@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import Editor, { Monaco } from '@monaco-editor/react';
-import { Play, FileCode, CheckCircle2, ChevronDown, GitCommit } from 'lucide-react';
+import { Play, FileCode, CheckCircle2, ChevronDown, GitCommit, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import mockCodeReviewRaw from '@/data/code-review-data.json';
+import { DashboardTelemetry } from '@/types/dashboard';
 
 interface FileReviewData {
   file_path: string;
@@ -14,20 +14,22 @@ interface FileReviewData {
   suggested_code: string;
 }
 
-interface MockReviewData {
-  files: Record<string, FileReviewData>;
-}
-
 function CodeReviewContent() {
-  const mockData = mockCodeReviewRaw as unknown as MockReviewData;
-  const fileKeys = Object.keys(mockData.files);
-
-  const [selectedFileKey, setSelectedFileKey] = useState<string>(fileKeys[0]);
-  const activeReview = mockData.files[selectedFileKey];
+  const [dashboardData, setDashboardData] = useState<DashboardTelemetry | null>(null);
+  const [fileKeys, setFileKeys] = useState<string[]>([]);
+  const [selectedFileKey, setSelectedFileKey] = useState<string>('');
+  const [activeReview, setActiveReview] = useState<FileReviewData | null>(null);
+  const [isLoadingFix, setIsLoadingFix] = useState(false);
 
   // User-modified suggested code
   const [editedSuggestedCode, setEditedSuggestedCode] = useState<string>('');
-  const [isPushed, setIsPushed] = useState<boolean>(false);
+  const [isPushed, setIsPushed] = useState(false);
+  
+  // GitHub Modal state
+  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+  const [githubToken, setGithubToken] = useState('');
+  const [pushStatusMessage, setPushStatusMessage] = useState('');
+  const [pushStatusUrl, setPushStatusUrl] = useState('');
   const [editorsMounted, setEditorsMounted] = useState<number>(0);
 
   // References to editor instances and Monaco libraries
@@ -42,12 +44,49 @@ function CodeReviewContent() {
   const isSyncingRightRef = useRef<boolean>(false);
 
   useEffect(() => {
-    // Reset page states and load fresh file code when dropdown is switched
-    if (activeReview) {
-      setEditedSuggestedCode(activeReview.suggested_code);
-      setIsPushed(false);
+    const saved = sessionStorage.getItem("dashboardData");
+    if (saved) {
+      try {
+        const data = JSON.parse(saved) as DashboardTelemetry;
+        setDashboardData(data);
+        const keys = data.files.map(f => f.file_path);
+        setFileKeys(keys);
+        if (keys.length > 0) setSelectedFileKey(keys[0]);
+      } catch (e) {}
     }
-  }, [selectedFileKey, activeReview]);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedFileKey || !dashboardData) return;
+    
+    const fileMeta = dashboardData.files.find(f => f.file_path === selectedFileKey);
+    const reason = fileMeta?.reason || "Optimize code";
+    const repoUrl = sessionStorage.getItem("repoUrl") || "";
+
+    setIsLoadingFix(true);
+    setActiveReview(null);
+    setEditedSuggestedCode('');
+
+    fetch("http://localhost:8000/fix", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_url: repoUrl,
+        file_path: selectedFileKey,
+        issue_reason: reason
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      setActiveReview(data);
+      setEditedSuggestedCode(data.suggested_code);
+      setIsLoadingFix(false);
+    })
+    .catch(err => {
+      console.error(err);
+      setIsLoadingFix(false);
+    });
+  }, [selectedFileKey, dashboardData]);
 
   // Synchronized scroll listeners
   const handleLeftMount = (editor: any, monaco: Monaco) => {
@@ -115,20 +154,51 @@ function CodeReviewContent() {
       }));
       rightDecorationsRef.current = rightEditorRef.current.createDecorationsCollection(decs);
     }
-  }, [selectedFileKey, activeReview, editorsMounted, monacoRef.current]);
+  }, [activeReview, editorsMounted]);
 
   const handlePushFixes = () => {
-    // Print user modifications to console, simulating pushing fixes to backend
-    console.log(`Pushing suggested modifications for file ${activeReview.file_path}:`);
-    console.log(editedSuggestedCode);
-    
-    setIsPushed(true);
-    setTimeout(() => {
-      setIsPushed(false);
-    }, 3000);
+    if (!activeReview) return;
+    setIsTokenModalOpen(true);
   };
 
-  const getLanguage = (path: string) => {
+  const submitPushFix = () => {
+    if (!activeReview) return;
+    
+    setIsPushed(false);
+    setPushStatusMessage('Pushing...');
+    setPushStatusUrl('');
+    
+    const repoUrl = sessionStorage.getItem("repoUrl") || "";
+    fetch("http://localhost:8000/fix/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_url: repoUrl,
+        file_path: activeReview.file_path,
+        suggested_code: editedSuggestedCode,
+        github_token: githubToken.trim() || undefined
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      setIsPushed(true);
+      setPushStatusMessage(data.message || 'Pushed changes successfully!');
+      if (data.pr_url) setPushStatusUrl(data.pr_url);
+      setIsTokenModalOpen(false);
+      
+      setTimeout(() => {
+        setIsPushed(false);
+      }, 10000);
+    })
+    .catch(err => {
+      console.error(err);
+      setIsPushed(false);
+      setPushStatusMessage('Error pushing fixes.');
+    });
+  };
+
+  const getLanguage = (path: string | undefined) => {
+    if (!path) return 'javascript';
     return path.endsWith('.py') ? 'python' : 'javascript';
   };
 
@@ -154,7 +224,7 @@ function CodeReviewContent() {
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Current File</span>
           <div className="flex items-center gap-2 mt-1">
             <FileCode className="w-4 h-4 text-violet-400" />
-            <span className="text-white text-xs font-mono tracking-wide">{activeReview.file_path}</span>
+            <span className="text-white text-xs font-mono tracking-wide">{activeReview?.file_path || selectedFileKey}</span>
           </div>
         </div>
 
@@ -178,6 +248,23 @@ function CodeReviewContent() {
       </div>
 
       {/* Code Editors Section (occupying available height) */}
+      {fileKeys.length === 0 ? (
+        <div className="flex-grow flex flex-col items-center justify-center rounded-xl border border-slate-900 bg-slate-950/60 backdrop-blur-xl min-h-0 w-full text-center p-8">
+           <div className="w-12 h-12 rounded-full bg-emerald-950/50 border border-emerald-900/50 flex items-center justify-center mb-4">
+             <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+           </div>
+           <p className="text-lg font-bold text-slate-200">Repository is Clean</p>
+           <p className="text-sm text-slate-500 mt-2 max-w-md">
+             CodeDebtAI did not find any files with significant technical debt or high complexity that require refactoring. Great job!
+           </p>
+        </div>
+      ) : isLoadingFix || !activeReview ? (
+        <div className="flex-grow flex flex-col items-center justify-center rounded-xl border border-slate-900 bg-slate-950/60 backdrop-blur-xl min-h-0 w-full">
+           <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mb-4" />
+           <p className="text-sm font-bold text-slate-200">Generating AI Code Fix...</p>
+           <p className="text-xs text-slate-500 mt-2">Groq LLM is analyzing and refactoring {selectedFileKey}.</p>
+        </div>
+      ) : (
       <div className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-5 min-h-0 w-full">
         {/* Left Editor: Suggested Fixes (Editable) */}
         <div className="flex flex-col h-full rounded-xl border border-slate-900 bg-slate-950/60 backdrop-blur-xl overflow-hidden relative">
@@ -240,6 +327,7 @@ function CodeReviewContent() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Bottom Center Actions Block */}
       <div className="flex flex-col items-center justify-center gap-3.5 flex-shrink-0">
@@ -254,13 +342,66 @@ function CodeReviewContent() {
         <div className="text-[10px] font-medium text-slate-500 select-none min-h-[14px]">
           {isPushed ? (
             <span className="text-emerald-400 font-semibold flex items-center gap-1.5 justify-center">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Pushed changes successfully! Created git commit in repository.
+              <CheckCircle2 className="w-3.5 h-3.5" /> 
+              {pushStatusMessage}
+              {pushStatusUrl && (
+                <a href={pushStatusUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-emerald-300 transition-colors ml-2">
+                  View Pull Request
+                </a>
+              )}
             </span>
           ) : (
             <span>This will commit and push the changes from the left editor to the repository.</span>
           )}
         </div>
       </div>
+
+      {/* GitHub Token Modal */}
+      {isTokenModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-[450px] bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 relative">
+            <button 
+              onClick={() => setIsTokenModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <h3 className="text-lg font-semibold text-white mb-2">Push to GitHub</h3>
+            <p className="text-xs text-slate-400 mb-6">
+              Enter a GitHub Personal Access Token to automatically create a Pull Request with these fixes. If left blank, changes will only be applied to the local clone.
+            </p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">GitHub Token (Optional)</label>
+                <input 
+                  type="password"
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value)}
+                  placeholder="ghp_xxxxxxxxxxxx"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                />
+              </div>
+              
+              <div className="flex gap-3 justify-end mt-8">
+                <button 
+                  onClick={() => setIsTokenModalOpen(false)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={submitPushFix}
+                  className="px-5 py-2 rounded-lg text-sm font-bold text-white bg-violet-600 hover:bg-violet-500 shadow-[0_4px_20px_rgba(139,92,246,0.3)] transition-all"
+                >
+                  Confirm & Push
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

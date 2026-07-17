@@ -31,6 +31,7 @@ export default function Home() {
 
   // Loading Screen States
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
+  const [traceMessages, setTraceMessages] = useState<string[]>([]);
 
   // Group classification based on step index
   const getActiveGroup = (index: number) => {
@@ -72,8 +73,58 @@ export default function Home() {
     setTimeout(() => {
       setIsPinned(true);
       setLoading(false);
-      // Immediately set the first step as active on pinning
       setCurrentStepIndex(0);
+      setTraceMessages(["Initializing LangGraph pipeline..."]);
+
+      // Connect to the Backend WebSocket
+      const analysisId = crypto.randomUUID();
+      const wsUrl = `ws://localhost:8000/analysis/${analysisId}/events?repo_url=${encodeURIComponent(repoUrl)}`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.event === "progress_update") {
+            const stepName = data.payload.step;
+            const newTrace = data.payload.trace;
+            
+            if (newTrace && newTrace.length > 0) {
+              setTraceMessages(newTrace);
+            } else if (data.payload.message) {
+              setTraceMessages(prev => [...prev, data.payload.message]);
+            }
+
+            // Map the backend's LangGraph node to the UI's visual steps
+            if (stepName === "clone_node") setCurrentStepIndex(2);
+            else if (stepName === "analyze_node") setCurrentStepIndex(4);
+            else if (stepName === "contextualize_node") setCurrentStepIndex(7);
+            else if (stepName === "report_node") setCurrentStepIndex(9);
+          } else if (data.event === "analysis_completed") {
+            setCurrentStepIndex(workflowSteps.length - 1);
+            setTraceMessages(prev => [...prev, "Analysis successfully completed."]);
+            
+            // Save the real agentic payload for the dashboard to use!
+            sessionStorage.setItem("dashboardData", JSON.stringify(data.payload.dashboard));
+            sessionStorage.setItem("repoUrl", repoUrl);
+            
+            setTimeout(() => {
+              router.push('/dashboard');
+            }, 1200);
+          } else if (data.event === "analysis_failed") {
+            setTraceMessages(prev => [...prev, `ERROR: ${data.payload.error_message}`]);
+            alert("Analysis failed: " + data.payload.error_message);
+            handleCancelScan();
+          }
+        } catch (err) {
+          console.error("Failed to parse WS message", err);
+        }
+      };
+
+      ws.onerror = () => {
+        alert("Failed to connect to the backend analysis engine.");
+        handleCancelScan();
+      };
     }, 600);
   };
 
@@ -81,21 +132,7 @@ export default function Home() {
     setIsPinned(false);
     setRepoUrl('');
     setCurrentStepIndex(-1);
-  };
-
-  // Manual simulator click trigger to drive progression
-  const triggerNextStepManual = () => {
-    const nextIdx = currentStepIndex + 1;
-    if (nextIdx < workflowSteps.length) {
-      setCurrentStepIndex(nextIdx);
-
-      // Auto-redirect to dashboard when scan is complete
-      if (workflowSteps[nextIdx] === 'Analysis Complete') {
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 1200);
-      }
-    }
+    setTraceMessages([]);
   };
 
   // Helper lists to display active steps for the current group
@@ -356,26 +393,30 @@ export default function Home() {
             </AnimatePresence>
           </div>
 
-          {/* Control Reset & Simulation Trigger */}
-          <div className="pt-6 border-t border-slate-900 w-full flex justify-between gap-4 select-none">
+          {/* Real-time Agent Thoughts */}
+          <div className="w-full mt-4 bg-slate-950/80 border border-slate-800/60 rounded-xl p-4 font-mono text-xs text-slate-400 max-h-[140px] overflow-y-auto">
+             <div className="flex items-center gap-2 mb-3 text-[10px] uppercase font-bold text-slate-500">
+                <Sparkles className="w-3.5 h-3.5 text-violet-400" /> Agent Chain of Thought
+             </div>
+             {traceMessages.map((msg, i) => (
+                <div key={i} className="flex gap-2.5 mb-1.5 items-start">
+                   <span className="text-violet-500/50 flex-shrink-0">[{new Date().toLocaleTimeString()}]</span>
+                   <span className="text-slate-300 leading-relaxed">{msg}</span>
+                </div>
+             ))}
+             {traceMessages.length === 0 && (
+                <div className="text-slate-600 italic">Waiting for agent to begin reasoning...</div>
+             )}
+          </div>
+
+          {/* Control Reset */}
+          <div className="pt-6 border-t border-slate-900 w-full flex justify-center gap-4 select-none">
             <button
               type="button"
               onClick={handleCancelScan}
               className="text-[10px] uppercase font-bold text-slate-500 hover:text-slate-400 border border-slate-900 hover:border-slate-800 px-3 py-1.5 rounded transition-colors cursor-pointer"
             >
               Cancel Scan
-            </button>
-
-            <button
-              type="button"
-              onClick={triggerNextStepManual}
-              disabled={currentStepIndex >= workflowSteps.length - 1}
-              className={cn(
-                "text-[10px] uppercase font-black text-violet-400 hover:text-violet-300 border border-violet-950 hover:border-violet-900 px-3 py-1.5 rounded transition-colors cursor-pointer",
-                currentStepIndex >= workflowSteps.length - 1 ? "opacity-30 cursor-not-allowed" : ""
-              )}
-            >
-              Simulate Next WS Message
             </button>
           </div>
         </motion.div>

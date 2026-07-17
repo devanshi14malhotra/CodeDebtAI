@@ -1,20 +1,37 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Download, Folder } from 'lucide-react';
-import mockDashboardRaw from '@/data/dashboard-data.json';
 import { DashboardTelemetry } from '@/types/dashboard';
 
 export function Header() {
-  // Retrieve metrics from mock dataset (will be replaced by live backend fetch in production)
-  const mockDashboardData = mockDashboardRaw as unknown as DashboardTelemetry;
-  const repoPath = mockDashboardData.files[0]?.file_path || "";
-  const pathParts = repoPath.split(/[\\/]/);
-  const repoName = pathParts[pathParts.length - 1]?.replace('.py', '') ? "testing-code-debt" : "testing-code-debt";
+  const [dashboardData, setDashboardData] = useState<DashboardTelemetry | null>(null);
+  const [repoName, setRepoName] = useState<string>("Repository");
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem("dashboardData");
+    if (saved) {
+      try {
+        const data = JSON.parse(saved) as DashboardTelemetry;
+        setDashboardData(data);
+        
+        const repoUrl = sessionStorage.getItem("repoUrl");
+        if (repoUrl) {
+          const parts = repoUrl.replace(/\/$/, '').split('/');
+          const name = parts[parts.length - 1].replace('.git', '');
+          setRepoName(name || "Scanned Repository");
+        } else {
+          setRepoName("Scanned Repository");
+        }
+      } catch (e) {
+        console.error("Failed to parse dashboard data for header", e);
+      }
+    }
+  }, []);
 
   const handleDownloadReport = () => {
-    // Generate a visual JSON file download for preview
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(mockDashboardData, null, 2));
+    if (!dashboardData) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dashboardData, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
     downloadAnchor.setAttribute("download", `${repoName}-analysis-report.json`);

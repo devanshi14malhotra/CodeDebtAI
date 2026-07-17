@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CodeReviewItem } from '@/types/code-review';
 import { Sparkles, CheckCircle2, Shield, Zap, Hammer, AlertTriangle } from 'lucide-react';
-import mockDashboardRaw from '@/data/dashboard-data.json';
 import { DashboardTelemetry } from '@/types/dashboard';
 import { cn } from '@/lib/utils';
 
@@ -15,10 +14,18 @@ interface FixCardProps {
 
 export function FixCard({ item, onAccept, isAccepted }: FixCardProps) {
   const [loading, setLoading] = useState(false);
+  const [fileMeta, setFileMeta] = useState<any>(null);
 
-  // Cross-reference dashboard data using file_path to obtain priority score & reasons
-  const dashboardData = mockDashboardRaw as unknown as DashboardTelemetry;
-  const fileMeta = dashboardData.files.find(f => f.file_path === item.file_path);
+  useEffect(() => {
+    const saved = sessionStorage.getItem("dashboardData");
+    if (saved) {
+      try {
+        const data = JSON.parse(saved) as DashboardTelemetry;
+        const meta = data.files.find(f => f.file_path === item.file_path);
+        setFileMeta(meta);
+      } catch(e) {}
+    }
+  }, [item.file_path]);
 
   const priorityScore = fileMeta?.priority_score || 20;
   const complexityGrade = fileMeta?.complexity_grade || 'C';

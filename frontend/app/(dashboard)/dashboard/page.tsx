@@ -1,11 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Metrics } from '@/components/dashboard/metrics';
 import { AnalyticsSection } from '@/components/dashboard/analytics-section';
 import { FlaggedFilesTable } from '@/components/dashboard/flagged-files-table';
-import mockDashboardRaw from '@/data/dashboard-data.json';
 import { DashboardTelemetry } from '@/types/dashboard';
 
 // Framer Motion entry stagger animation definitions
@@ -33,9 +32,28 @@ const itemVariants = {
 };
 
 export default function Dashboard() {
-  // Feed dashboard component elements dynamically from mock contract JSON.
-  // When integrated in the next phase, this will retrieve data from backend APIs.
-  const mockDashboardData = mockDashboardRaw as unknown as DashboardTelemetry;
+  const [data, setData] = useState<DashboardTelemetry | null>(null);
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem("dashboardData");
+    if (saved) {
+      try {
+        setData(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse dashboard data");
+      }
+    }
+  }, []);
+
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400 space-y-4">
+        <p>Loading dashboard data...</p>
+        <p className="text-sm opacity-50">If you haven't run an analysis, please go back to the home page.</p>
+      </div>
+    );
+  }
+
   const { 
     health_score, 
     total_debt_score, 
@@ -43,9 +61,9 @@ export default function Dashboard() {
     severity_distribution, 
     summary, 
     files 
-  } = mockDashboardData;
+  } = data;
 
-  // The total flagged files count equals the cumulative severity breakdown total (4+7+11+5 = 27)
+  // The total flagged files count equals the cumulative severity breakdown total
   const flaggedFilesCount = severity_distribution.critical + 
                             severity_distribution.high + 
                             severity_distribution.medium + 
@@ -78,7 +96,14 @@ export default function Dashboard() {
 
       {/* 3. Flagged Files Data Table */}
       <motion.div variants={itemVariants}>
-        <FlaggedFilesTable files={files} />
+        {files && files.length > 0 ? (
+          <FlaggedFilesTable files={files} />
+        ) : (
+          <div className="p-8 rounded-2xl border border-emerald-900/50 bg-emerald-950/20 text-center shadow-lg shadow-emerald-900/5">
+            <h3 className="text-xl font-bold text-emerald-400 mb-2">Clean Repository!</h3>
+            <p className="text-emerald-500/80">No high-priority technical debt was found in this codebase.</p>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

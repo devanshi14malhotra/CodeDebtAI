@@ -10,81 +10,6 @@ interface FlaggedFilesTableProps {
 }
 
 export function FlaggedFilesTable({ files }: FlaggedFilesTableProps) {
-  // Construct 12 rows for high-fidelity testing dataset
-  const extendedFiles: FlaggedFile[] = [
-    ...files,
-    {
-      line_start: 104,
-      line_end: 180,
-      file_path: "app_v2.py",
-      priority_score: 46,
-      severity: "Critical",
-      complexity_grade: "D",
-      maintainability_index: 43.1,
-      reason: "Duplicate codebase file with redundant helper scripts."
-    },
-    {
-      line_start: 110,
-      line_end: 220,
-      file_path: "data_parser_v2.py",
-      priority_score: 41,
-      severity: "Critical",
-      complexity_grade: "D",
-      maintainability_index: 39.5,
-      reason: "Complex sub-methods flagged by Radon analyzer."
-    },
-    {
-      line_start: 12,
-      line_end: 98,
-      file_path: "matrix_processing_v2.py",
-      priority_score: 34,
-      severity: "High",
-      complexity_grade: "C",
-      maintainability_index: 54.8,
-      reason: "High processing delay in main loops."
-    },
-    {
-      line_start: 45,
-      line_end: 120,
-      file_path: "utils_helper.py",
-      priority_score: 24,
-      severity: "High",
-      complexity_grade: "C",
-      maintainability_index: 57.2,
-      reason: "Redundant utility functions with duplicate operations."
-    },
-    {
-      line_start: 80,
-      line_end: 160,
-      file_path: "core_utils.py",
-      priority_score: 21,
-      severity: "Medium",
-      complexity_grade: "B",
-      maintainability_index: 69.1,
-      reason: "Complex parameters inside core mathematical matrix logic."
-    },
-    {
-      line_start: 20,
-      line_end: 60,
-      file_path: "config_v2.py",
-      priority_score: 11,
-      severity: "Low",
-      complexity_grade: "A",
-      maintainability_index: 84.6,
-      reason: "Low complexity file with simple configurations."
-    },
-    {
-      line_start: 5,
-      line_end: 35,
-      file_path: "setup_env.py",
-      priority_score: 8,
-      severity: "Low",
-      complexity_grade: "A",
-      maintainability_index: 89.2,
-      reason: "Simple environment setup configurations."
-    }
-  ];
-
   // Severity sorting priority mapper
   const severityOrder: Record<SeverityLevel, number> = {
     'Critical': 4,
@@ -94,7 +19,7 @@ export function FlaggedFilesTable({ files }: FlaggedFilesTableProps) {
   };
 
   // Sort rows first by Severity (Critical -> High -> Medium -> Low), and then by Priority Score (highest -> lowest)
-  const sortedFiles = [...extendedFiles].sort((a, b) => {
+  const sortedFiles = [...files].sort((a, b) => {
     const sevA = severityOrder[a.severity] || 0;
     const sevB = severityOrder[b.severity] || 0;
     if (sevB !== sevA) {
@@ -261,7 +186,7 @@ export function FlaggedFilesTable({ files }: FlaggedFilesTableProps) {
 
       {/* Table Footer info indicators */}
       <div className="px-6 py-4 border-t border-slate-900 bg-slate-950/20 text-center text-[10px] text-slate-500 font-bold select-none">
-        Showing 1 to {sortedFiles.length} of 27 results
+        Showing {sortedFiles.length} {sortedFiles.length === 1 ? 'result' : 'results'}
       </div>
     </div>
   );
